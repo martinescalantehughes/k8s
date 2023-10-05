@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-cronjob-cleaner
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cronjob-cleaner
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cronjob-cleaner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cronjob-cleaner
+subjects:
+- kind: ServiceAccount
+  name: sa-cronjob-cleaner
+  namespace: default
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cleanup-fpods
+  namespace: default
+spec:
+  concurrencyPolicy: Allow
+  suspend: false
+  schedule: "*/30 * * * *"
+  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: sa-cronjob-cleaner
+          containers:
+          - name: cleanup-fpods
+            image: bitnami/kubectl            
+            imagePullPolicy: Always
+            command: ["sh", "-c", "kubectl delete pods --field-selector=status.phase=Failed -A"]
+          restartPolicy: OnFailure
+          terminationGracePeriodSeconds: 30
